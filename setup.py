@@ -1,7 +1,10 @@
 from setuptools import setup, find_packages
 
-with open("requirements.txt", "r") as f:
-    requirements = f.read().splitlines()
+
+def parse_requirements(filename):
+    with open(filename, "r") as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
 
 setup(
     name="chestnut-tools",
@@ -11,7 +14,7 @@ setup(
     author_email="moyo.ajayi.ds@gmail.com",
     license="MIT",
     packages=find_packages(),
-    install_requires=requirements,
+    install_requires=parse_requirements("requirements.txt"),
     classifiers=[  # Optional classifiers
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
