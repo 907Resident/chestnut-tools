@@ -229,4 +229,20 @@ def standard_df_clean(df: pd.DataFrame):
     # convert all names to lower case while also converting the camel case to be separated by an underscore
     df = df.clean_names(case_type="snake")
 
+    # convert the date column to a date
+    if "date" not in df.columns:
+        raise KeyError(
+            "'date' is not found as the name for the date column. Perhaps the it was not appropriately changed to lower case or this is not the right .dat file for this toolset. Please inspect the column names of your dataframe further."
+        )
+    else:
+        df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d", errors="coerce")
+    if "time" not in df.columns:
+        raise KeyError(
+            "'time' is not found as the name for the date column. Perhaps the it was not appropriately changed to lower case or this is not the right .dat file for this toolset. Please inspect the column names of your dataframe further."
+        )
+    else:
+        df["time"] = pd.to_datetime(
+            df["time"], format="%H:%M:%S.%f", errors="coerce"
+        ).dt.time
+
     return df
