@@ -11,15 +11,42 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
+import subprocess
 import tempfile
+import fnmatch
 import shutil
 import os
 
+# %% find files by a given extension and directory
+
+def find_files_by_extension(directory, extension, substring=None):
+    """
+    Find all files in a directory (and subdirectories) with a specific extension
+    and optionally containing a specific substring in their names.
+    
+    Args:
+        directory (str): The path to the directory to search.
+        extension (str): The file extension to look for (e.g., ".txt").
+        substring (str, optional): The substring to match in the filenames. Defaults to None.
+
+    Returns:
+        list: A list of matching file paths.
+    """
+    matching_files = []
+    
+    # Traverse the directory tree
+    for root, _, files in os.walk(directory):
+        for file in files:
+            # Check for the extension and substring (if given)
+            if file.endswith(extension) and (substring is None or substring in file):
+                matching_files.append(os.path.join(root, file))
+    
+    return matching_files
 
 # %% finding the correct .zip folder in the eosAC data
 
 
-def find_zip_files(base_dir, date_input):
+def find_files_by_date_and_extension(base_dir, date_input, matching_extension:str=".zip"):
     """
     Finds .zip files in a directory structure that match a given date or date range.
 
@@ -29,6 +56,7 @@ def find_zip_files(base_dir, date_input):
             - "YYYYMM" for a specific month.
             - "YYYYMMDD" for a specific day.
             - "YYYYMMDD-YYYYMMDD" for a date range.
+        matching_extension (str): The desired extension of the files in question.
 
     Returns:
         list of str: A list of paths to the matching .zip files.
@@ -84,34 +112,6 @@ def find_zip_files(base_dir, date_input):
         except ValueError:
             return False
 
-    # TODO: delete this subfunction after comfort is given from the current version
-    # def matches_range(filename, start_date, end_date):
-    #     """
-    #     Checks if a file's name matches a given date range.
-
-    #     Args:
-    #         filename (str): The name of the file to check.
-    #         start_date (datetime): The start date of the range.
-    #         end_date (datetime): The end date of the range.
-
-    #     Returns:
-    #         bool: True if the file matches the range, False otherwise.
-    #     """
-    #     date_match = re.search(r"(\d{4})(\d{2})(\d{2})", filename)
-    #     range_match = re.search(r"(\d{2})-(\d{2})([A-Za-z]+)\d{4}", filename)
-
-    #     if date_match:
-    #         file_date = datetime.strptime(date_match.group(0), "%Y%m%d")
-    #         return start_date <= file_date <= end_date
-    #     elif range_match:
-    #         month_str = range_match.group(3)
-    #         month_number = datetime.strptime(month_str, "%b").month
-    #         year = int(re.search(r"\d{4}", filename).group(0))
-    #         range_start = datetime(year, month_number, int(range_match.group(1)))
-    #         range_end = datetime(year, month_number, int(range_match.group(2)))
-    #         return range_start <= end_date and start_date <= range_end
-    #     return False
-
     # parse the user input into start and end dates
     start_date, end_date = parse_date_input(date_input)
     matching_files = []
@@ -125,7 +125,7 @@ def find_zip_files(base_dir, date_input):
             # explore subfolders and collect .zip files
             for root, _, files in os.walk(dir_entry.path):
                 for file in files:
-                    if file.endswith(".zip"):
+                    if file.endswith(matching_extension):
                         matching_files.append(os.path.join(root, file))
 
     return matching_files
@@ -336,3 +336,12 @@ def write_and_clean_chunk_to_sql(chunk, table_name, engine, schema, batch_size):
         index=False,
         chunksize=batch_size,
     )
+
+# %% parse times to create datetime
+
+def parse_datetime(row):
+    try:
+        return pd.to_datetime(row["date"] + " " + row["time"])
+    except:
+        return pd.NaT
+    
