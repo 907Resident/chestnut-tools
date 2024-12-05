@@ -226,10 +226,10 @@ def process_zipped_dat_files_with_fwf(zip_path, keep_unzipped=False, output_dir=
 
 def standard_df_clean(df: pd.DataFrame):
 
-    # convert all names to lower case while also converting the camel case to be separated by an underscore
+    # step 01: convert all names to lower case while also converting the camel case to be separated by an underscore
     df = df.clean_names(case_type="snake")
 
-    # convert the date column to a date
+    # step 02: convert the date column to a date
     if "date" not in df.columns:
         raise KeyError(
             "'date' is not found as the name for the date column. Perhaps the it was not appropriately changed to lower case or this is not the right .dat file for this toolset. Please inspect the column names of your dataframe further."
@@ -245,4 +245,94 @@ def standard_df_clean(df: pd.DataFrame):
             df["time"], format="%H:%M:%S.%f", errors="coerce"
         ).dt.time
 
+    # step 03: merge date and time into `datetime`
+    df["datetime"] = df.apply(
+        lambda row: pd.Timestamp.combine(row["date"], row["time"]), axis=1
+    )
+    cols = list(df.columns)
+    cols.insert(2, cols.pop(cols.index("datetime")))
+    df = df[cols]
+
+    # step 04: sort by datetime
+    df = df.sort_values(by="datetime", ascending=False).reset_index(drop=True)
+
     return df
+
+
+# %% does the table in question already exist
+
+
+def table_exists(schema, table_name, engine):
+    query = f"""
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = '{schema}' AND table_name = '{table_name}'
+    );
+    """
+    with engine.connect() as conn:
+        result = conn.exec_driver_sql(
+            query
+        ).scalar()  # `.scalar()` returns a single value
+    return result
+
+
+# %% write large dataframes to the same sql table
+
+
+def write_and_clean_chunk_to_sql(chunk, table_name, engine, schema, batch_size):
+    """
+    Process a data chunk, clean it, and write it to a SQL database.
+
+    This function performs the following operations:
+    1. Computes the chunk if it's a lazy object.
+    2. Converts 'date' and 'time' columns to datetime objects.
+    3. Creates a 'datetime' column by combining 'date' and 'time'.
+    4. Reorders columns, moving 'datetime' to the third position.
+    5. Drops the original 'date' and 'time' columns.
+    6. Writes the processed chunk to a SQL database.
+
+    Args:
+        chunk (pandas.DataFrame or dask.dataframe.DataFrame): The data chunk to process.
+        table_name (str): Name of the SQL table to write to.
+        engine (sqlalchemy.engine.Engine): SQLAlchemy engine for database connection.
+        schema (str): The database schema to use.
+        batch_size (int): Number of rows to write in each batch.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If the chunk doesn't contain required columns or if data types are incompatible.
+        SQLAlchemyError: If there's an error writing to the database.
+    """
+
+    chunk = chunk.compute()
+
+    chunk["date"] = pd.to_datetime(chunk["date"], format="%Y-%m-%d", errors="coerce")
+    chunk["time"] = pd.to_timedelta(chunk["time"])
+    chunk["datetime"] = chunk["date"] + chunk["time"]
+
+    # move the last column to the third position
+    last_column = chunk.columns[-1]
+    chunk = chunk[[col for col in chunk.columns if col != last_column] + [last_column]]
+
+    # move the last column to the third position from the left
+    cols = list(chunk.columns)
+    datetime_col = cols.pop(cols.index("datetime"))
+    cols.insert(2, datetime_col)
+    chunk = chunk[cols]
+
+    # drop date and time
+    chunk.drop(columns=["date", "time"], inplace=True)
+
+    chunk.info()
+
+    chunk.to_sql(
+        name=table_name,
+        con=engine,
+        schema=schema,
+        if_exists="append",
+        index=False,
+        chunksize=batch_size,
+    )
