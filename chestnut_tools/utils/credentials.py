@@ -1,7 +1,7 @@
 # %% import packages
 
 from onepassword.client import Client
-
+from dotenv import dotenv_values
 import subprocess
 
 # %%
