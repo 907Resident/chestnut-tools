@@ -44,17 +44,6 @@ def establish_service_acct_token_from_env(env_path: str, env_var_name: str) -> s
         except subprocess.CalledProcessError:
             raise RuntimeError("1Password sign-in failed. Please authenticate manually and try again.")
 
-    # build and resolve secret reference
-    secret_name_reference = os.environ.get(env_var_name)
-    if not secret_name_reference:
-        raise RuntimeError(f"Environment variable '{env_var_name}' is not set or empty.")
-
-    # read the token from 1Password
-    try:
-        token = subprocess.check_output(["op", "read", secret_name_reference], text=True).strip()
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to read 1Password secret: {e}")
-
     # store token in environment
     os.environ[f"{env_var_name}"] = token
     print("Service account token successfully loaded into environment.")
