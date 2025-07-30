@@ -12,37 +12,44 @@ import os
 
 
 def establish_service_acct_token(
-    secret_reference: str = "op://MyVault/Service Account Token/token",
     acct_token_name: str = "OP_SERVICE_ACCOUNT_TOKEN",
-):
+    env_file: str = "./config/dev.env",
+) -> str:
     """
-    Fetches the service account token from a 1Password secret reference using `op read`,
-    then uses `op run` with the raw token set in memory to fetch the target environment variable.
+    Loads a secret reference from a .env file, uses 1Password CLI to fetch the actual service
+    account token, and runs `op run` to retrieve the value of the token environment variable.
 
     Args:
-        secret_reference (str): The 1Password secret reference to the service account token.
-        acct_token_name (str): The name of the environment variable to retrieve from `op run`.
+        acct_token_name (str): The name of the env var in the .env file that holds the 1Password secret reference.
+        env_file (str): Path to the .env file containing the secret reference.
 
     Returns:
-        str: The resolved value of the requested environment variable.
+        str: The resolved token value as returned by `printenv` within `op run`.
 
     Raises:
-        Exception: If the token cannot be fetched or `op run` fails.
+        Exception: If the secret reference cannot be resolved or the token cannot be retrieved.
     """
+    # Step 1: Load the .env file into a dictionary
+    env_vars = dotenv_values(env_file)
 
-    # Step 1: Use `op read` to fetch the raw service account token
-    token_result = subprocess.run(
+    if acct_token_name not in env_vars:
+        raise Exception(f"{acct_token_name} not found in {env_file}")
+
+    secret_reference = env_vars[acct_token_name]
+
+    # Step 2: Use `op read` to resolve the secret reference into a raw token
+    read_result = subprocess.run(
         ["op", "read", secret_reference],
         capture_output=True,
         text=True,
     )
 
-    if token_result.returncode != 0:
-        raise Exception(f"Failed to read service account token: {token_result.stderr}")
+    if read_result.returncode != 0:
+        raise Exception(f"Failed to read token from 1Password: {read_result.stderr}")
 
-    raw_token = token_result.stdout.strip()
+    raw_token = read_result.stdout.strip()
 
-    # Step 2: Use `op run` with the token injected into the environment
+    # Step 3: Use `op run` to extract the environment variable using the resolved token
     env = os.environ.copy()
     env["OP_SERVICE_ACCOUNT_TOKEN"] = raw_token
 
@@ -61,7 +68,6 @@ def establish_service_acct_token(
     )
 
     if run_result.returncode != 0:
-        raise Exception(f"Failed to get env variable from op run: {run_result.stderr}")
+        raise Exception(f"Failed to retrieve env variable via op run: {run_result.stderr}")
 
     return run_result.stdout.strip()
-
