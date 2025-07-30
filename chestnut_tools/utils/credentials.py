@@ -12,30 +12,14 @@ import os
 def establish_service_acct_token_from_env(env_path: str, env_var_name: str) -> str:
     """
     Loads a service account token from 1Password using a secret reference defined in a .env file.
-
-    This function loads a `.env` file from the given path, ensures that the user is signed in to the 
-    1Password CLI (`op`), retrieves the secret reference from the specified environment variable, and 
-    reads the actual secret using `op read`.
-
-    Args:
-        env_path (str): Path to the .env file containing the 1Password secret reference.
-        env_var_name (str): The name of the environment variable that contains the 1Password reference 
-                            (e.g., "OP_SERVICE_ACCOUNT_TOKEN" with value like "op://Vault/Item/field").
-
-    Returns:
-        str: The service account token value retrieved from 1Password.
-
-    Raises:
-        RuntimeError: If the 1Password sign-in fails or if reading the secret reference fails.
     """
-    
-    # load .env if it exists
+    # Load .env if it exists
     env_path = Path(env_path)
     if env_path.exists():
         load_dotenv(dotenv_path=env_path)
 
-    # check if OP_SESSION environment variable is present
-    is_signed_in = "OP_SESSION_my" in os.environ  # replace 'my' with your actual 1P shorthand if needed
+    # Check if OP_SESSION is active
+    is_signed_in = any(var.startswith("OP_SESSION_") for var in os.environ)
 
     if not is_signed_in:
         print("Not signed into 1Password CLI. Launching sign-in flow...")
@@ -44,8 +28,22 @@ def establish_service_acct_token_from_env(env_path: str, env_var_name: str) -> s
         except subprocess.CalledProcessError:
             raise RuntimeError("1Password sign-in failed. Please authenticate manually and try again.")
 
-    # store token in environment
-    token = os.environ.get(f"{env_var_name}")
-    print("Service account token successfully loaded into environment.")
+    # Get secret reference from env
+    secret_reference = os.environ.get(env_var_name)
+    if not secret_reference:
+        raise RuntimeError(f"Environment variable {env_var_name} not found or is empty.")
 
+    # Read secret from 1Password
+    try:
+        result = subprocess.run(
+            ["op", "read", secret_reference],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        token = result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to read secret from 1Password: {e.stderr}")
+
+    print("Service account token successfully retrieved.")
     return token
