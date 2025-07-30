@@ -45,7 +45,7 @@ def establish_service_acct_token_from_env(env_path: str, env_var_name: str) -> s
             raise RuntimeError("1Password sign-in failed. Please authenticate manually and try again.")
 
     # store token in environment
-    os.environ[f"{env_var_name}"] = token
+    token = os.environ.get[f"{env_var_name}"]
     print("Service account token successfully loaded into environment.")
 
     return token
