@@ -1,7 +1,7 @@
 # %% import packages
 
 from onepassword.client import Client
-from dotenv import dotenv_values
+from dotenv import load_dotenv
 from pathlib import Path
 import subprocess
 import os
